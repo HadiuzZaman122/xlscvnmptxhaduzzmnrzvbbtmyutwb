@@ -92,6 +92,7 @@ function resolveSupabasePhotoUrl(photoPath) {
   const pages = document.querySelectorAll('.story-page');
   const pageDots = document.querySelectorAll('.page-dot');
   const navChapterText = document.getElementById('nav-chapter-text');
+  const worldCanvas = document.getElementById('world-bg-canvas');
   const canvas = document.getElementById('ambient-canvas');
 
   // Proposal Choice Elements
@@ -109,6 +110,23 @@ function resolveSupabasePhotoUrl(photoPath) {
   /* ==========================================================================
      1. SPA SLIDE NAVIGATION SYSTEM (SESSIONSTORAGE STATE PERSISTENCE)
      ========================================================================== */
+  function updateJourneyMenuActive(pageIdx) {
+    const target = parseInt(pageIdx, 10);
+    if (isNaN(target)) return;
+    const jumpButtons = document.querySelectorAll('.journey-menu-item[data-jump-page]');
+    jumpButtons.forEach((btn) => {
+      const pIdx = parseInt(btn.getAttribute('data-jump-page'), 10);
+      const isActive = (pIdx === target);
+      btn.classList.toggle('active', isActive);
+      btn.classList.toggle('item-active', isActive);
+      // Remove hardcoded default highlight on non-active chapters
+      if (!isActive) {
+        btn.classList.remove('item-featured');
+      }
+      btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+    });
+  }
+
   function showPage(pageNumber, isInitial = false) {
     const targetIdx = parseInt(pageNumber, 10);
     if (isNaN(targetIdx) || targetIdx < 1 || targetIdx > pages.length) return;
@@ -139,6 +157,9 @@ function resolveSupabasePhotoUrl(photoPath) {
         // Update body background color
         const targetBg = page.getAttribute('data-bg') || '#fdf5f6';
         document.body.style.backgroundColor = targetBg;
+        if (typeof updateWorldBgForPage === 'function') {
+          updateWorldBgForPage(targetIdx, targetBg);
+        }
 
         // Update nav chapter label
         const chapter = page.getAttribute('data-chapter');
@@ -170,6 +191,9 @@ function resolveSupabasePhotoUrl(photoPath) {
       const dotIdx = parseInt(dot.getAttribute('data-page-idx'), 10);
       dot.classList.toggle('active', dotIdx === targetIdx);
     });
+
+    // Dynamically update DIVE IN menu active chapter highlight
+    updateJourneyMenuActive(targetIdx);
 
     setTimeout(() => {
       isTransitioning = false;
@@ -332,240 +356,1382 @@ function resolveSupabasePhotoUrl(photoPath) {
     });
   }
   /* ==========================================================================
-     3. LARGE & NUMEROUS ANIMATED ATMOSPHERE CANVAS
-     Hearts (25-70px), Flowers (25-55px), Leaves (30-65px), Sparkles
-     Spread across margins, clearly visible, flowing organically
+     3. TWO-TONE ROMANTIC WORLD & LUXURIOUS FLOWING RED SILK FABRIC BOUNDARY
+     - Upper region (~55-65% height): Romantic blush pink, warm cream, soft rose & peach
+     - Lower region (~35-45% height): Complementary lavender, pale blue & soft peach
+     - Boundary: WIDE luxurious RED SILK FABRIC flowing horizontally with:
+       * Realistic volumetric folds with deep creases and shadow occlusion
+       * Multiple overlapping semi-transparent drapery layers for fabric depth
+       * Multi-pass satin specular highlights (broad glow + sharp catchlight)
+       * Internal wrinkle detail lines that shift with the wave animation
+       * Soft ambient glow halos around the fabric edges
+     - Slow, continuous natural cloth wave animation (6-harmonic wave system)
+     - Multi-layer 3D depth:
+       * Back layer: Two color regions + atmospheric glow orbs + distant 3D objects
+       * Middle layer: The broad flowing red silk fabric boundary
+       * Foreground layer: Prominent 3D glass cubes & glossy hearts (OVERLAPPING)
      ========================================================================== */
-  function initAmbientCanvas() {
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
 
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
+  let updateWorldBgForPage = function (pageIdx, targetBg) { };
 
-    window.addEventListener('resize', () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+  function initRomanticWorldBg() {
+    if (!worldCanvas) return;
+    const ctx = worldCanvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      worldCanvas.width = Math.round(width * dpr);
+      worldCanvas.height = Math.round(height * dpr);
+      worldCanvas.style.width = width + 'px';
+      worldCanvas.style.height = height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize, { passive: true });
+
+    // Page-specific complementary palettes
+    // Upper region = warm romantic blush pinks/creams/peach
+    // Lower region = uniform, clean, solid pastel blue inspired by celestial watercolor palette
+    const PAGE_PALETTES = {
+      1: { r1: [255, 245, 247], r2: [218, 236, 248] },
+      2: { r1: [255, 248, 242], r2: [218, 236, 248] },
+      3: { r1: [255, 244, 246], r2: [218, 236, 248] },
+      4: { r1: [255, 246, 242], r2: [218, 236, 248] },
+      5: { r1: [254, 243, 248], r2: [218, 236, 248] },
+      6: { r1: [255, 248, 242], r2: [218, 236, 248] },
+      7: { r1: [254, 244, 248], r2: [218, 236, 248] },
+      8: { r1: [255, 246, 248], r2: [218, 236, 248] }
+    };
+
+    let col1 = [...(PAGE_PALETTES[1]?.r1 || [255, 245, 247])];
+    let col2 = [...(PAGE_PALETTES[1]?.r2 || [218, 236, 248])];
+    let targetCol1 = [...col1];
+    let targetCol2 = [...col2];
+
+    updateWorldBgForPage = function (pageIdx, hexBg) {
+      const pal = PAGE_PALETTES[pageIdx] || PAGE_PALETTES[1];
+      targetCol1 = [...pal.r1];
+      targetCol2 = [...pal.r2];
+    };
+
+    let isTabVisible = true;
+    document.addEventListener('visibilitychange', () => {
+      isTabVisible = !document.hidden;
     });
 
-    const isMobile = window.innerWidth < 768;
-    const maxParticles = isMobile ? 16 : 24; // High visibility density
+    const isMob = () => window.innerWidth < 768;
 
-    const heartColors = [
-      'rgba(244, 151, 170, ', // Soft Pink
-      'rgba(196, 118, 135, ', // Dusty Rose
-      'rgba(242, 142, 130, ', // Coral
-      'rgba(200, 177, 228, ', // Lavender
-      'rgba(217, 83, 111, ',  // Soft Red
-      'rgba(247, 178, 151, ', // Peach
-      'rgba(223, 184, 103, ', // Champagne Gold
-      'rgba(232, 176, 189, '  // Muted Rose
-    ];
-
-    const flowerColors = [
-      '#fcd3de', '#e8b0bd', '#fde2e4', '#e2d4f0', '#fae1dd', '#fff5eb', '#fce8ec'
-    ];
-
-    const leafColors = [
-      '#9db89f', '#b5cca8', '#889c7c', '#a8c5a4'
-    ];
-
-    // Helper: generate particles primarily in margin zones to keep text clear
-    function getMarginX() {
-      const marginWidth = width * 0.35;
-      if (Math.random() > 0.5) {
-        // Left margin (0 to 35% width)
-        return Math.random() * marginWidth;
-      } else {
-        // Right margin (65% to 100% width)
-        return width - (Math.random() * marginWidth);
-      }
-    }
-
-    function createParticle(initialY = null) {
-      const typeRand = Math.random();
-      let type = 'heart';
-      if (typeRand < 0.45) type = 'heart';
-      else if (typeRand < 0.72) type = 'flower';
-      else if (typeRand < 0.90) type = 'leaf';
-      else type = 'sparkle';
-
-      const isMob = window.innerWidth < 768;
-
-      // Prominent Larger Sizes
-      let size = 30;
-      if (type === 'heart') {
-        const isAccentLarge = Math.random() < 0.15;
-        size = isMob
-          ? (isAccentLarge ? Math.random() * 15 + 38 : Math.random() * 16 + 22)
-          : (isAccentLarge ? Math.random() * 20 + 52 : Math.random() * 24 + 28);
-      } else if (type === 'flower') {
-        size = isMob ? (Math.random() * 18 + 22) : (Math.random() * 26 + 28);
-      } else if (type === 'leaf') {
-        size = isMob ? (Math.random() * 18 + 26) : (Math.random() * 30 + 34);
-      } else {
-        size = isMob ? (Math.random() * 4 + 3) : (Math.random() * 6 + 4);
-      }
-
-      const x = getMarginX();
-      const y = initialY !== null ? initialY : height + Math.random() * 80;
-
-      const colorBase = type === 'heart' ? heartColors[Math.floor(Math.random() * heartColors.length)] :
-        type === 'flower' ? flowerColors[Math.floor(Math.random() * flowerColors.length)] :
-          type === 'leaf' ? leafColors[Math.floor(Math.random() * leafColors.length)] :
-            '#dfb867';
-
-      // Varied Flow Durations (8s to 18s equivalent speeds)
-      const speedY = -(Math.random() * 0.65 + 0.35);
-      const speedX = (Math.random() - 0.5) * 0.45;
-
-      return {
-        type,
-        x,
-        y,
-        size,
-        colorBase,
-        speedY,
-        speedX,
-        rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 0.012,
+    // ------------------------------------------------------------------------
+    // DISTANT BACKGROUND 3D OBJECTS (FLOATING IN UPPER REGION ABOVE SILK)
+    // Kept strictly above the silk boundary so lower area remains clean & solid
+    // ------------------------------------------------------------------------
+    const bgDistantCubes = [];
+    const numDistantCubes = isMob() ? 2 : 4;
+    for (let i = 0; i < numDistantCubes; i++) {
+      bgDistantCubes.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * (window.innerHeight * 0.52),
+        size: Math.random() * 18 + 22,
+        depth: Math.random() * 200 + 280,
+        speedY: -(Math.random() * 0.18 + 0.08),
+        speedX: (Math.random() - 0.5) * 0.20,
         swing: Math.random() * Math.PI * 2,
-        swingSpeed: Math.random() * 0.018 + 0.008,
-        opacity: Math.random() * 0.35 + 0.45,
-        twinkle: Math.random() * Math.PI
-      };
+        swingSpeed: Math.random() * 0.008 + 0.004,
+        rx: Math.random() * Math.PI * 2,
+        ry: Math.random() * Math.PI * 2,
+        rz: Math.random() * Math.PI * 2,
+        vrx: (Math.random() - 0.5) * 0.007,
+        vry: (Math.random() - 0.5) * 0.009,
+        vrz: (Math.random() - 0.5) * 0.005,
+        opacity: Math.random() * 0.22 + 0.30
+      });
     }
 
-    const particles = [];
-    for (let i = 0; i < maxParticles; i++) {
-      particles.push(createParticle(Math.random() * height));
+    const bgDistantHearts = [];
+    const numDistantHearts = isMob() ? 3 : 6;
+    const bgHeartColors = ['#e03350', '#f06292', '#4ba3e8', '#5cb87d', '#f7be38'];
+    for (let i = 0; i < numDistantHearts; i++) {
+      bgDistantHearts.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * (window.innerHeight * 0.52),
+        size: Math.random() * 14 + 18,
+        color: bgHeartColors[i % bgHeartColors.length],
+        speedY: -(Math.random() * 0.25 + 0.12),
+        speedX: (Math.random() - 0.5) * 0.25,
+        swing: Math.random() * Math.PI * 2,
+        swingSpeed: Math.random() * 0.010 + 0.005,
+        rot: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.008,
+        yaw: Math.random() * Math.PI * 2,
+        yawSpeed: Math.random() * 0.012 + 0.006,
+        opacity: Math.random() * 0.25 + 0.38
+      });
     }
 
-    // Draw Smooth SVG-Style Heart
-    function drawHeart(c, x, y, size, color, opacity, rot) {
+    // Atmospheric glow orbs (floating in upper region ONLY)
+    const glowOrbs = [];
+    const numGlowOrbs = isMob() ? 2 : 3;
+    const orbColors = [
+      'rgba(255, 200, 220, 0.18)', 'rgba(200, 220, 255, 0.15)',
+      'rgba(255, 240, 200, 0.14)', 'rgba(230, 200, 255, 0.16)',
+      'rgba(255, 220, 240, 0.12)'
+    ];
+    for (let i = 0; i < numGlowOrbs; i++) {
+      glowOrbs.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * (window.innerHeight * 0.50),
+        radius: Math.random() * 80 + 60,
+        color: orbColors[i % orbColors.length],
+        speedX: (Math.random() - 0.5) * 0.15,
+        speedY: (Math.random() - 0.5) * 0.12,
+        phase: Math.random() * Math.PI * 2,
+        phaseSpeed: Math.random() * 0.003 + 0.001
+      });
+    }
+
+    function rotate3DSmall(v, rx, ry, rz) {
+      const [x, y, z] = v;
+      const cosX = Math.cos(rx), sinX = Math.sin(rx);
+      const y1 = y * cosX - z * sinX;
+      const z1 = y * sinX + z * cosX;
+      const cosY = Math.cos(ry), sinY = Math.sin(ry);
+      const x2 = x * cosY + z1 * sinY;
+      const z2 = -x * sinY + z1 * cosY;
+      const cosZ = Math.cos(rz), sinZ = Math.sin(rz);
+      const x3 = x2 * cosZ - y1 * sinZ;
+      const y3 = x2 * sinZ + y1 * cosZ;
+      return [x3, y3, z2];
+    }
+
+    function drawDistantCube(c, cube) {
       c.save();
-      c.translate(x, y);
-      c.rotate(rot);
-      c.globalAlpha = opacity;
-      c.fillStyle = color.startsWith('rgba') ? color + opacity + ')' : color;
+      const s = cube.size * 0.5;
+      const baseV = [
+        [-s, -s, -s], [s, -s, -s], [s, s, -s], [-s, s, -s],
+        [-s, -s,  s], [s, -s,  s], [s, s,  s], [-s, s,  s]
+      ];
+      const scale = 380 / (380 + cube.depth);
+      const proj = [];
+      for (let i = 0; i < 8; i++) {
+        const [rx, ry, rz] = rotate3DSmall(baseV[i], cube.rx, cube.ry, cube.rz);
+        proj.push({ x: cube.x + rx * scale, y: cube.y + ry * scale, z: rz });
+      }
 
-      const s = size / 20;
+      const faces = [
+        [0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4],
+        [3, 2, 6, 7], [0, 3, 7, 4], [1, 2, 6, 5]
+      ];
+
+      for (let i = 0; i < faces.length; i++) {
+        const f = faces[i];
+        c.beginPath();
+        c.moveTo(proj[f[0]].x, proj[f[0]].y);
+        c.lineTo(proj[f[1]].x, proj[f[1]].y);
+        c.lineTo(proj[f[2]].x, proj[f[2]].y);
+        c.lineTo(proj[f[3]].x, proj[f[3]].y);
+        c.closePath();
+        const faceAlpha = (i % 2 === 0 ? 0.22 : 0.14) * cube.opacity;
+        c.fillStyle = `rgba(225, 242, 255, ${faceAlpha})`;
+        c.fill();
+        c.strokeStyle = `rgba(255, 255, 255, ${0.68 * cube.opacity})`;
+        c.lineWidth = 1.3;
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    function drawDistantHeart(c, heart) {
+      c.save();
+      c.translate(heart.x, heart.y);
+      c.rotate(heart.rot);
+      const cosY = Math.cos(heart.yaw);
+      const scaleX = (cosY < 0 ? -1 : 1) * (0.35 + 0.65 * Math.abs(cosY));
+      c.scale(scaleX, 1);
+      const s = heart.size / 24;
       c.beginPath();
       c.moveTo(0, s * -4);
       c.bezierCurveTo(s * -10, s * -14, s * -20, s * 2, 0, s * 16);
       c.bezierCurveTo(s * 20, s * 2, s * 10, s * -14, 0, s * -4);
+      c.closePath();
+      c.fillStyle = heart.color;
+      c.globalAlpha = heart.opacity;
+      c.fill();
+
+      // Top lobe highlight
+      c.beginPath();
+      c.ellipse(-s * 5, -s * 5, s * 3.5, s * 2, -0.4, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(255, 255, 255, 0.45)';
       c.fill();
       c.restore();
     }
 
-    // Draw 5-Petal Pastel Flower
+    // ------------------------------------------------------------------------
+    // MAIN BACKGROUND RENDERING LOOP
+    // ------------------------------------------------------------------------
+    function renderWorld() {
+      if (!isTabVisible) {
+        requestAnimationFrame(renderWorld);
+        return;
+      }
+
+      for (let i = 0; i < 3; i++) {
+        col1[i] += (targetCol1[i] - col1[i]) * 0.04;
+        col2[i] += (targetCol2[i] - col2[i]) * 0.04;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      const isMobile = width < 768;
+      const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const waveScale = reducedMotion ? 0.25 : 1.0;
+      const now = performance.now();
+
+      // ======================================================================
+      // 1. SILK CLOTH SPINE & DRAPERY SPLINE GEOMETRY
+      // Elegant horizontal red silk ribbon with natural organic wave
+      // Placed comfortably in lower zone so content/headings remain clear
+      // ======================================================================
+      const baseMeanY = height * (isMobile ? 0.63 : 0.65);
+
+      // 6-harmonic wave system for rich, organic cloth motion
+      const w1 = Math.sin(now * 0.00032) * 12 * waveScale;
+      const w2 = Math.cos(now * 0.00024 + 1.1) * 10 * waveScale;
+      const w3 = Math.sin(now * 0.00040 + 2.3) * 8 * waveScale;
+      const w4 = Math.cos(now * 0.00028 + 3.5) * 11 * waveScale;
+      const w5 = Math.sin(now * 0.00018 + 0.7) * 6 * waveScale;
+      const w6 = Math.cos(now * 0.00045 + 4.2) * 5 * waveScale;
+
+      // Gentle wave anchors — crest stays comfortably low (beneath headings, polaroid & buttons)
+      const pLeft =  { x: -50,           y: baseMeanY - height * 0.04 + w1 + w5 };
+      const pDip1 =  { x: width * 0.22,  y: baseMeanY + height * 0.05 + w2 + w6 };
+      const pCrest = { x: width * 0.48,  y: baseMeanY - height * 0.04 + w3 };
+      const pDip2 =  { x: width * 0.74,  y: baseMeanY + height * 0.05 + w4 + w5 };
+      const pRight = { x: width + 60,    y: baseMeanY - height * 0.02 + w1 + w6 };
+
+      // Elegant silk ribbon width (refined, ~80-115px instead of oversized 280px)
+      const clothW = isMobile ? Math.min(80, width * 0.18) : Math.min(115, Math.max(80, width * 0.075));
+      const widthLeft =  clothW * 0.85;
+      const widthDip1 =  clothW * 1.15;
+      const widthCrest = clothW * 0.88;
+      const widthDip2 =  clothW * 1.18;
+      const widthRight = clothW * 0.85;
+
+      // Top contour with control points for smooth curvature
+      const topPts = [
+        { x: pLeft.x,       y: pLeft.y  - widthLeft  * 0.48 },
+        { x: width * 0.08,  y: pLeft.y  - widthLeft  * 0.30 + w6 * 0.4 },
+        { x: width * 0.15,  y: (pLeft.y + pDip1.y) * 0.5 - widthDip1 * 0.25 + w5 * 0.2 },
+        { x: pDip1.x,       y: pDip1.y  - widthDip1  * 0.42 },
+        { x: width * 0.34,  y: pDip1.y  - widthDip1  * 0.22 + w3 * 0.3 },
+        { x: pCrest.x,      y: pCrest.y - widthCrest * 0.50 },
+        { x: width * 0.58,  y: (pCrest.y + pDip2.y) * 0.5 - widthDip2 * 0.20 + w6 * 0.2 },
+        { x: width * 0.65,  y: pDip2.y  - widthDip2  * 0.24 },
+        { x: pDip2.x,       y: pDip2.y  - widthDip2  * 0.42 },
+        { x: width * 0.82,  y: pDip2.y  - widthDip2  * 0.18 + w5 * 0.3 },
+        { x: width * 0.90,  y: pRight.y - widthRight * 0.28 },
+        { x: pRight.x,      y: pRight.y - widthRight * 0.48 }
+      ];
+
+      // Bottom contour
+      const botPts = [
+        { x: pLeft.x,       y: pLeft.y  + widthLeft  * 0.52 },
+        { x: width * 0.08,  y: pLeft.y  + widthLeft  * 0.65 + w6 * 0.3 },
+        { x: width * 0.15,  y: (pLeft.y + pDip1.y) * 0.5 + widthDip1 * 0.55 + w5 * 0.2 },
+        { x: pDip1.x,       y: pDip1.y  + widthDip1  * 0.58 },
+        { x: width * 0.34,  y: pDip1.y  + widthDip1  * 0.60 + w3 * 0.2 },
+        { x: pCrest.x,      y: pCrest.y + widthCrest * 0.50 },
+        { x: width * 0.58,  y: (pCrest.y + pDip2.y) * 0.5 + widthDip2 * 0.58 + w6 * 0.2 },
+        { x: width * 0.65,  y: pDip2.y  + widthDip2  * 0.64 },
+        { x: pDip2.x,       y: pDip2.y  + widthDip2  * 0.58 },
+        { x: width * 0.82,  y: pDip2.y  + widthDip2  * 0.50 + w5 * 0.2 },
+        { x: width * 0.90,  y: pRight.y + widthRight * 0.60 },
+        { x: pRight.x,      y: pRight.y + widthRight * 0.52 }
+      ];
+
+      // Smooth Catmull-Rom–style Bézier curve through control points
+      function drawSmoothContour(points, isForward = true) {
+        const pts = isForward ? points : [...points].reverse();
+        if (pts.length < 2) return;
+        ctx.lineTo(pts[0].x, pts[0].y);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const xc = (pts[i].x + pts[i + 1].x) * 0.5;
+          const yc = (pts[i].y + pts[i + 1].y) * 0.5;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+        }
+        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+      }
+
+      // ======================================================================
+      // 2. UPPER PASTEL REGION (above the silk)
+      // Evenly luminous across entire viewport — zero dark spots in middle
+      // ======================================================================
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(-50, -50);
+      ctx.lineTo(width + 60, -50);
+      ctx.lineTo(topPts[topPts.length - 1].x, topPts[topPts.length - 1].y);
+      drawSmoothContour(topPts, false);
+      ctx.lineTo(-50, -50);
+      ctx.closePath();
+
+      // Clean vertical linear gradient ensures identical brightness from left to right
+      const gradUpper = ctx.createLinearGradient(0, 0, 0, baseMeanY);
+      gradUpper.addColorStop(0, `rgb(${Math.round(col1[0])}, ${Math.round(col1[1])}, ${Math.round(col1[2])})`);
+      gradUpper.addColorStop(1, `rgba(${Math.round(col1[0])}, ${Math.round(col1[1])}, ${Math.round(col1[2])}, 0.98)`);
+      ctx.fillStyle = gradUpper;
+      ctx.fill();
+
+      // Centered atmospheric bloom keeps the middle equally luminous and bright
+      const bloomCenter = ctx.createRadialGradient(width * 0.50, height * 0.24, 10, width * 0.50, height * 0.24, width * 0.60);
+      bloomCenter.addColorStop(0, 'rgba(255, 255, 255, 0.40)');
+      bloomCenter.addColorStop(0.6, 'rgba(255, 250, 252, 0.16)');
+      bloomCenter.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = bloomCenter;
+      ctx.fill();
+
+      const bloom1 = ctx.createRadialGradient(width * 0.20, height * 0.20, 10, width * 0.20, height * 0.20, width * 0.45);
+      bloom1.addColorStop(0, 'rgba(255, 250, 246, 0.25)');
+      bloom1.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = bloom1;
+      ctx.fill();
+
+      const bloom2 = ctx.createRadialGradient(width * 0.80, height * 0.18, 8, width * 0.80, height * 0.18, width * 0.42);
+      bloom2.addColorStop(0, 'rgba(255, 246, 250, 0.22)');
+      bloom2.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = bloom2;
+      ctx.fill();
+      ctx.restore();
+
+      // ======================================================================
+      // 3. LOWER REGION (below the silk)
+      // Completely smooth, clean, uniform solid pastel blue surface
+      // Inspired by celestial watercolor / alcohol ink palette
+      // Zero gradients, zero blooms, zero textures, zero dark patches
+      // ======================================================================
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(botPts[0].x, botPts[0].y);
+      drawSmoothContour(botPts, true);
+      ctx.lineTo(width + 60, height + 50);
+      ctx.lineTo(-50, height + 50);
+      ctx.closePath();
+
+      // Clean, solid uniform pastel blue fill
+      ctx.fillStyle = `rgb(${Math.round(col2[0])}, ${Math.round(col2[1])}, ${Math.round(col2[2])})`;
+      ctx.fill();
+      ctx.restore();
+
+      // ======================================================================
+      // 4. ATMOSPHERIC GLOW ORBS (dreamy floating light spots in UPPER region)
+      // Kept strictly above the silk boundary so lower area remains clean & solid
+      // ======================================================================
+      const maxUpperY = baseMeanY - 30;
+      for (const orb of glowOrbs) {
+        orb.phase += orb.phaseSpeed;
+        orb.x += orb.speedX + Math.sin(orb.phase) * 0.2;
+        orb.y += orb.speedY + Math.cos(orb.phase * 0.7) * 0.15;
+        // Wrap around horizontally
+        if (orb.x < -orb.radius) orb.x = width + orb.radius;
+        if (orb.x > width + orb.radius) orb.x = -orb.radius;
+        // Keep strictly above silk in upper region
+        if (orb.y < -orb.radius) orb.y = maxUpperY;
+        if (orb.y > maxUpperY) orb.y = -orb.radius;
+
+        const pulse = 0.7 + 0.3 * Math.sin(orb.phase * 1.5);
+        ctx.save();
+        const orbGrad = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.radius * pulse);
+        orbGrad.addColorStop(0, orb.color);
+        orbGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = orbGrad;
+        ctx.beginPath();
+        ctx.arc(orb.x, orb.y, orb.radius * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ======================================================================
+      // 5. DISTANT 3D OBJECTS (BEHIND SILK - UPPER REGION ONLY)
+      // Floating exclusively above the silk boundary
+      // ======================================================================
+      for (const dc of bgDistantCubes) {
+        dc.swing += dc.swingSpeed;
+        dc.x += dc.speedX + Math.sin(dc.swing) * 0.25;
+        dc.y += dc.speedY;
+        dc.rx += dc.vrx;
+        dc.ry += dc.vry;
+        dc.rz += dc.vrz;
+        if (dc.y < -60) { dc.y = baseMeanY - 15; dc.x = Math.random() * width; }
+        drawDistantCube(ctx, dc);
+      }
+
+      for (const dh of bgDistantHearts) {
+        dh.swing += dh.swingSpeed;
+        dh.x += dh.speedX + Math.sin(dh.swing) * 0.30;
+        dh.y += dh.speedY;
+        dh.rot += dh.rotSpeed;
+        dh.yaw += dh.yawSpeed;
+        if (dh.y < -50) { dh.y = baseMeanY - 15; dh.x = Math.random() * width; }
+        drawDistantHeart(ctx, dh);
+      }
+
+      // ======================================================================
+      // 6. BROAD LUXURIOUS RED SILK FABRIC BOUNDARY
+      // Multi-layer rendering for realistic depth:
+      //   Layer A: Deep shadow underneath (elevation)
+      //   Layer B: Back drapery swag (deep crimson)
+      //   Layer C: Internal crease/fold shadows
+      //   Layer D: Main fabric body (3 overlapping swags)
+      //   Layer E: Wrinkle detail lines
+      //   Layer F: Multi-pass satin specular highlights
+      //   Layer G: Edge hem outlines with ambient glow
+      // ======================================================================
+
+      // A. Soft shadow beneath silk (very low opacity warm wine tint, NO pitch black)
+      ctx.save();
+      ctx.globalAlpha = 0.03;
+      ctx.beginPath();
+      ctx.moveTo(topPts[0].x, topPts[0].y + 14);
+      drawSmoothContour(topPts.map(p => ({ x: p.x, y: p.y + 14 })), true);
+      drawSmoothContour(botPts.map(p => ({ x: p.x, y: p.y + 18 })), false);
+      ctx.closePath();
+      ctx.fillStyle = '#8a1024';
+      ctx.fill();
+      ctx.restore();
+
+      // Helper: Build closed silk ribbon polygon
+      function fillSilkSwag(subTop, subBot, grad, shadowUnder = null) {
+        ctx.save();
+        if (shadowUnder) {
+          ctx.save();
+          ctx.globalAlpha = 0.04;
+          ctx.beginPath();
+          ctx.moveTo(subBot[0].x, subBot[0].y + 4);
+          drawSmoothContour(subBot.map(p => ({ x: p.x, y: p.y + 4 })), true);
+          ctx.lineTo(subBot[subBot.length - 1].x, subBot[subBot.length - 1].y + 12);
+          drawSmoothContour(subBot.map(p => ({ x: p.x, y: p.y + 12 })), false);
+          ctx.closePath();
+          ctx.fillStyle = '#8a1024';
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(subTop[0].x, subTop[0].y);
+        drawSmoothContour(subTop, true);
+        ctx.lineTo(subBot[subBot.length - 1].x, subBot[subBot.length - 1].y);
+        drawSmoothContour(subBot, false);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // B. SWAG 1 (Left Billowing Drape - Radiant Ruby/Rose Silk)
+      const swag1Top = topPts.slice(0, 5);
+      const swag1Bot = botPts.slice(0, 5);
+      const gSwag1 = ctx.createLinearGradient(0, pLeft.y - widthLeft, width * 0.38, pDip1.y + widthDip1);
+      gSwag1.addColorStop(0, '#9e1024');
+      gSwag1.addColorStop(0.25, '#c81632');
+      gSwag1.addColorStop(0.55, '#e62444');
+      gSwag1.addColorStop(0.80, '#f23c58');
+      gSwag1.addColorStop(1, '#b01228');
+      fillSilkSwag(swag1Top, swag1Bot, gSwag1, 'rgba(140, 20, 36, 0.12)');
+
+      // C. SWAG 3 (Right Flowing Drapery - Radiant Ruby/Rose Silk)
+      const swag3Top = topPts.slice(7);
+      const swag3Bot = botPts.slice(7);
+      const gSwag3 = ctx.createLinearGradient(width * 0.62, pCrest.y, width + 40, pDip2.y + widthDip2);
+      gSwag3.addColorStop(0, '#9e1024');
+      gSwag3.addColorStop(0.30, '#c81632');
+      gSwag3.addColorStop(0.60, '#e82242');
+      gSwag3.addColorStop(0.85, '#f23854');
+      gSwag3.addColorStop(1, '#a81226');
+      fillSilkSwag(swag3Top, swag3Bot, gSwag3, 'rgba(140, 20, 36, 0.12)');
+
+      // D. SWAG 2 (Center Fold — overlaps Swag 1 and 3 - Radiant Ruby/Rose Silk)
+      const swag2Top = topPts.slice(3, 10);
+      const swag2Bot = botPts.slice(3, 10);
+      const gSwag2 = ctx.createLinearGradient(width * 0.28, pDip1.y, width * 0.68, pCrest.y - widthCrest);
+      gSwag2.addColorStop(0, '#920e20');
+      gSwag2.addColorStop(0.20, '#be1630');
+      gSwag2.addColorStop(0.50, '#e62242');
+      gSwag2.addColorStop(0.78, '#f43e5c');
+      gSwag2.addColorStop(0.92, '#ea2a4a');
+      gSwag2.addColorStop(1, '#a61226');
+      fillSilkSwag(swag2Top, swag2Bot, gSwag2, 'rgba(140, 20, 36, 0.14)');
+
+      // E. INTERNAL CREASE/FOLD SHADOWS (Delicate wine accents, no dark muddy blobs)
+      function drawCreaseShadow(pts, intensity) {
+        ctx.save();
+        ctx.beginPath();
+        drawSmoothContour(pts, true);
+        ctx.lineWidth = isMobile ? 8 : 12;
+        ctx.strokeStyle = `rgba(130, 20, 35, ${intensity * 0.18})`;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.lineWidth = isMobile ? 3 : 5;
+        ctx.strokeStyle = `rgba(130, 20, 35, ${intensity * 0.35})`;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawCreaseShadow([
+        { x: width * 0.06, y: pLeft.y + widthLeft * 0.10 },
+        { x: width * 0.14, y: (pLeft.y + pDip1.y) * 0.5 + widthDip1 * 0.20 },
+        { x: pDip1.x,       y: pDip1.y + widthDip1 * 0.15 }
+      ], 0.18);
+      drawCreaseShadow([
+        { x: width * 0.35, y: pDip1.y + w3 * 0.3 },
+        { x: pCrest.x,      y: pCrest.y + widthCrest * 0.08 },
+        { x: width * 0.58, y: (pCrest.y + pDip2.y) * 0.5 + w4 * 0.2 }
+      ], 0.20);
+      drawCreaseShadow([
+        { x: width * 0.66, y: pDip2.y + widthDip2 * 0.12 },
+        { x: pDip2.x,       y: pDip2.y + widthDip2 * 0.18 },
+        { x: width * 0.84, y: pRight.y + widthRight * 0.15 }
+      ], 0.16);
+
+      // F. SATIN SPECULAR HIGHLIGHTS
+      function drawSatinHighlight(pts, lw, col) {
+        ctx.save();
+        ctx.beginPath();
+        drawSmoothContour(pts, true);
+        ctx.lineWidth = lw;
+        ctx.strokeStyle = col;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Broad warm glow along the upper crest (left half)
+      const crestLine1 = [
+        { x: topPts[0].x, y: topPts[0].y + 12 },
+        { x: topPts[1].x, y: topPts[1].y + 15 },
+        { x: topPts[2].x, y: topPts[2].y + 18 },
+        { x: topPts[3].x, y: topPts[3].y + 15 },
+        { x: topPts[4].x, y: topPts[4].y + 12 },
+        { x: topPts[5].x, y: topPts[5].y + 10 }
+      ];
+      drawSatinHighlight(crestLine1, isMobile ? 14 : 24, 'rgba(255, 100, 130, 0.16)');
+      drawSatinHighlight(crestLine1, isMobile ? 6 : 10, 'rgba(255, 170, 195, 0.50)');
+      drawSatinHighlight(crestLine1, isMobile ? 2 : 3, 'rgba(255, 240, 245, 0.85)');
+
+      // Upper crest (right half)
+      const crestLine2 = [
+        { x: topPts[5].x, y: topPts[5].y + 10 },
+        { x: topPts[6].x, y: topPts[6].y + 16 },
+        { x: topPts[7].x, y: topPts[7].y + 18 },
+        { x: topPts[8].x, y: topPts[8].y + 15 },
+        { x: topPts[9].x, y: topPts[9].y + 12 },
+        { x: topPts[10].x, y: topPts[10].y + 10 },
+        { x: topPts[11].x, y: topPts[11].y + 12 }
+      ];
+      drawSatinHighlight(crestLine2, isMobile ? 14 : 24, 'rgba(255, 100, 130, 0.16)');
+      drawSatinHighlight(crestLine2, isMobile ? 6 : 10, 'rgba(255, 170, 195, 0.50)');
+      drawSatinHighlight(crestLine2, isMobile ? 2 : 3, 'rgba(255, 240, 245, 0.85)');
+
+      // Interior fold highlight lines (wrinkle sheen)
+      const foldHL1 = [
+        { x: width * 0.10, y: pDip1.y - widthDip1 * 0.05 },
+        { x: width * 0.18, y: pDip1.y + widthDip1 * 0.16 },
+        { x: width * 0.26, y: pDip1.y + widthDip1 * 0.22 },
+        { x: width * 0.32, y: pDip1.y + widthDip1 * 0.10 }
+      ];
+      drawSatinHighlight(foldHL1, isMobile ? 6 : 9, 'rgba(255, 180, 200, 0.22)');
+      drawSatinHighlight(foldHL1, isMobile ? 1.5 : 2, 'rgba(255, 235, 240, 0.55)');
+
+      const foldHL2 = [
+        { x: width * 0.60, y: pDip2.y - widthDip2 * 0.06 },
+        { x: width * 0.68, y: pDip2.y + widthDip2 * 0.18 },
+        { x: width * 0.76, y: pDip2.y + widthDip2 * 0.24 },
+        { x: width * 0.84, y: pDip2.y + widthDip2 * 0.12 }
+      ];
+      drawSatinHighlight(foldHL2, isMobile ? 6 : 9, 'rgba(255, 180, 200, 0.22)');
+      drawSatinHighlight(foldHL2, isMobile ? 1.5 : 2, 'rgba(255, 235, 240, 0.55)');
+
+      // Center twist highlight
+      const twistHL = [
+        { x: width * 0.38, y: pCrest.y - widthCrest * 0.12 },
+        { x: pCrest.x,      y: pCrest.y + widthCrest * 0.04 },
+        { x: width * 0.54, y: pCrest.y - widthCrest * 0.08 }
+      ];
+      drawSatinHighlight(twistHL, isMobile ? 8 : 12, 'rgba(255, 160, 185, 0.22)');
+      drawSatinHighlight(twistHL, isMobile ? 1.8 : 2.5, 'rgba(255, 242, 248, 0.70)');
+
+      // G. EDGE HEM OUTLINES
+      // Soft glow top
+      ctx.save();
+      ctx.beginPath();
+      drawSmoothContour(topPts, true);
+      ctx.lineWidth = isMobile ? 8 : 14;
+      ctx.strokeStyle = 'rgba(255, 140, 165, 0.10)';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      // Crisp top hem
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(255, 210, 220, 0.75)';
+      ctx.beginPath();
+      drawSmoothContour(topPts, true);
+      ctx.stroke();
+      ctx.restore();
+
+      // Soft glow bottom
+      ctx.save();
+      ctx.beginPath();
+      drawSmoothContour(botPts, true);
+      ctx.lineWidth = isMobile ? 8 : 14;
+      ctx.strokeStyle = 'rgba(140, 20, 35, 0.08)';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      // Crisp bottom hem
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(150, 22, 38, 0.35)';
+      ctx.beginPath();
+      drawSmoothContour(botPts, true);
+      ctx.stroke();
+      ctx.restore();
+
+      requestAnimationFrame(renderWorld);
+    }
+
+    renderWorld();
+  }
+
+  /* ==========================================================================
+     FOREGROUND 3D ATMOSPHERE CANVAS ENGINE (OVERLAPPING THE SILK FABRIC)
+     - Layer 3 (Foreground): Real dimensional 3D transparent glass cubes
+       with visible bevelled edges, reflections, refraction & multi-axis tumble
+     - Glossy dimensional 3D hearts in red, pink, blue, green & yellow
+       crossing and floating OVER the silk boundary
+     - 3D Rose Petals (tumbling 3D flip), 3D leaves, peach blossoms, butterflies
+     - Iridescent bubbles, pearl spheres, twinkling diamond stars & sparkles
+     - Margin-biased distribution ensuring zero obstruction of cards/text
+     ========================================================================== */
+  function initAmbientCanvas() {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize, { passive: true });
+
+    let isTabVisible = true;
+    document.addEventListener('visibilitychange', () => {
+      isTabVisible = !document.hidden;
+    });
+
+    const isMob = () => window.innerWidth < 768;
+
+    // Helper: spawn across the margins & allow crossing the central silk boundary
+    function getParticleSpawnX() {
+      const marginRatio = isMob() ? 0.34 : 0.30;
+      const marginW = width * marginRatio;
+      const r = Math.random();
+      if (r < 0.38) {
+        return Math.random() * marginW;
+      } else if (r < 0.76) {
+        return width - (Math.random() * marginW);
+      } else {
+        // Floating across center and overlapping the silk ribbon
+        return width * (0.28 + Math.random() * 0.44);
+      }
+    }
+
+    function getCubeSpawnX() {
+      // Distribute cubes across the entire width so they float across both regions and overlap silk
+      const pad = isMob() ? 25 : 50;
+      return pad + Math.random() * (width - pad * 2);
+    }
+
+    // ------------------------------------------------------------------------
+    // 1. FOREGROUND 3D TRANSLUCENT WATER-GLASS CUBES (UPPER REGION ABOVE SILK)
+    // Kept strictly above the silk boundary so lower area remains clean & solid
+    // ------------------------------------------------------------------------
+    const fgCubes = [];
+    const numFgCubes = isMob() ? 3 : 5;
+
+    function createFgGlassCube(initY = null) {
+      const size = isMob()
+        ? Math.random() * 20 + 36
+        : Math.random() * 32 + 48;
+      const silkUpperLevel = height * 0.62;
+      return {
+        x: getCubeSpawnX(),
+        y: initY !== null ? initY : silkUpperLevel + Math.random() * 10,
+        depth: Math.random() * 150 + 90, // Foreground 3D depth
+        size: size,
+        speedY: -(Math.random() * 0.30 + 0.18),
+        speedX: (Math.random() - 0.5) * 0.32,
+        swing: Math.random() * Math.PI * 2,
+        swingSpeed: Math.random() * 0.012 + 0.006,
+        rx: Math.random() * Math.PI * 2,
+        ry: Math.random() * Math.PI * 2,
+        rz: Math.random() * Math.PI * 2,
+        vrx: (Math.random() - 0.5) * 0.009 + 0.005,
+        vry: (Math.random() - 0.5) * 0.012 + 0.006,
+        vrz: (Math.random() - 0.5) * 0.007,
+        opacity: Math.random() * 0.15 + 0.82
+      };
+    }
+
+    for (let i = 0; i < numFgCubes; i++) {
+      fgCubes.push(createFgGlassCube(Math.random() * (height * 0.56)));
+    }
+
+    function rotate3D(v, rx, ry, rz) {
+      const [x, y, z] = v;
+      const cosX = Math.cos(rx), sinX = Math.sin(rx);
+      const y1 = y * cosX - z * sinX;
+      const z1 = y * sinX + z * cosX;
+      const cosY = Math.cos(ry), sinY = Math.sin(ry);
+      const x2 = x * cosY + z1 * sinY;
+      const z2 = -x * sinY + z1 * cosY;
+      const cosZ = Math.cos(rz), sinZ = Math.sin(rz);
+      const x3 = x2 * cosZ - y1 * sinZ;
+      const y3 = x2 * sinZ + y1 * cosZ;
+      return [x3, y3, z2];
+    }
+
+    function drawGlassCube(c, cube) {
+      c.save();
+      const s = cube.size * 0.5;
+      const baseVertices = [
+        [-s, -s, -s], [s, -s, -s], [s, s, -s], [-s, s, -s],
+        [-s, -s,  s], [s, -s,  s], [s, s,  s], [-s, s,  s]
+      ];
+
+      // Perspective projection
+      const fov = 420;
+      const scale = fov / (fov + cube.depth);
+      const proj = [];
+      for (let i = 0; i < 8; i++) {
+        const [rx, ry, rz] = rotate3D(baseVertices[i], cube.rx, cube.ry, cube.rz);
+        proj.push({
+          x: cube.x + rx * scale,
+          y: cube.y + ry * scale,
+          z: rz
+        });
+      }
+
+      // Soft Floating Ground Shadow below the cube
+      const shadowY = cube.y + s * 1.5 * scale;
+      const shadowW = s * 1.5 * scale;
+      const shadowH = s * 0.42 * scale;
+      c.beginPath();
+      c.ellipse(cube.x, shadowY, shadowW, shadowH, 0, 0, Math.PI * 2);
+      c.fillStyle = `rgba(50, 20, 35, ${0.12 * cube.opacity})`;
+      c.fill();
+
+      // 6 Quads with normals
+      const faces = [
+        { v: [0, 1, 2, 3], norm: [0, 0, -1] },
+        { v: [4, 5, 6, 7], norm: [0, 0,  1] },
+        { v: [0, 1, 5, 4], norm: [0, -1, 0] },
+        { v: [3, 2, 6, 7], norm: [0,  1, 0] },
+        { v: [0, 3, 7, 4], norm: [-1, 0, 0] },
+        { v: [1, 2, 6, 5], norm: [ 1, 0, 0] }
+      ];
+
+      // Transform face normals & sort faces back-to-front
+      const lightDir = [-0.577, -0.577, 0.577];
+      const sortedFaces = faces.map(f => {
+        const rotNorm = rotate3D(f.norm, cube.rx, cube.ry, cube.rz);
+        const avgZ = (proj[f.v[0]].z + proj[f.v[1]].z + proj[f.v[2]].z + proj[f.v[3]].z) * 0.25;
+        const dot = rotNorm[0] * lightDir[0] + rotNorm[1] * lightDir[1] + rotNorm[2] * lightDir[2];
+        return {
+          v: f.v,
+          avgZ,
+          intensity: Math.max(0, dot),
+          frontFacing: rotNorm[2] > 0
+        };
+      }).sort((a, b) => a.avgZ - b.avgZ);
+
+      // Draw all translucent glass faces
+      for (const face of sortedFaces) {
+        const p0 = proj[face.v[0]];
+        const p1 = proj[face.v[1]];
+        const p2 = proj[face.v[2]];
+        const p3 = proj[face.v[3]];
+
+        c.beginPath();
+        c.moveTo(p0.x, p0.y);
+        c.lineTo(p1.x, p1.y);
+        c.lineTo(p2.x, p2.y);
+        c.lineTo(p3.x, p3.y);
+        c.closePath();
+
+        // Crystal water-glass fill with refraction tint
+        const baseAlpha = face.frontFacing
+          ? (0.22 + face.intensity * 0.28) * cube.opacity
+          : 0.14 * cube.opacity;
+        c.fillStyle = `rgba(235, 248, 255, ${baseAlpha})`;
+        c.fill();
+
+        // Diagonal specular reflection sheen across front faces
+        if (face.frontFacing) {
+          const grad = c.createLinearGradient(p0.x, p0.y, p2.x, p2.y);
+          grad.addColorStop(0, `rgba(255, 255, 255, ${0.72 * cube.opacity})`);
+          grad.addColorStop(0.35, `rgba(235, 250, 255, ${0.28 * cube.opacity})`);
+          grad.addColorStop(0.70, `rgba(200, 235, 255, ${0.10 * cube.opacity})`);
+          grad.addColorStop(1, `rgba(255, 255, 255, ${0.30 * cube.opacity})`);
+          c.fillStyle = grad;
+          c.fill();
+        }
+
+        // Rounded bevelled edges with crisp specular highlights
+        c.lineWidth = face.intensity > 0.35 ? 2.0 : 1.2;
+        c.strokeStyle = face.intensity > 0.35
+          ? `rgba(255, 255, 255, ${0.96 * cube.opacity})`
+          : `rgba(175, 215, 245, ${0.55 * cube.opacity})`;
+        c.lineJoin = 'round';
+        c.stroke();
+      }
+
+      // Specular twinkle highlight on top illuminated corner
+      let brightestIdx = 0;
+      let minD = Infinity;
+      for (let i = 0; i < 8; i++) {
+        const d = proj[i].x + proj[i].y - proj[i].z;
+        if (d < minD) { minD = d; brightestIdx = i; }
+      }
+      const bp = proj[brightestIdx];
+      c.beginPath();
+      c.arc(bp.x, bp.y, 2.4, 0, Math.PI * 2);
+      c.fillStyle = `rgba(255, 255, 255, ${0.95 * cube.opacity})`;
+      c.fill();
+
+      c.restore();
+    }
+
+    // ------------------------------------------------------------------------
+    // 2. FOREGROUND 3D GLOSSY HEARTS (5 ROMANTIC COLORS)
+    // ------------------------------------------------------------------------
+    const HEART_PALETTES = [
+      // 0: Romantic Soft Red
+      { name: 'red', base: '#e03350', highlight: '#ff7088', shadow: '#8c1325', specular: 'rgba(255, 235, 240, 0.98)' },
+      // 1: Blush Pink
+      { name: 'pink', base: '#f06292', highlight: '#ffa0c2', shadow: '#a62452', specular: 'rgba(255, 240, 248, 0.98)' },
+      // 2: Sky Blue
+      { name: 'blue', base: '#4ba3e8', highlight: '#9bd1fc', shadow: '#1c62a4', specular: 'rgba(240, 250, 255, 0.98)' },
+      // 3: Mint / Sage Green
+      { name: 'green', base: '#5cb87d', highlight: '#9fe2b8', shadow: '#247541', specular: 'rgba(240, 255, 245, 0.98)' },
+      // 4: Pastel Warm Yellow
+      { name: 'yellow', base: '#f7be38', highlight: '#ffe382', shadow: '#b37d08', specular: 'rgba(255, 252, 230, 0.98)' }
+    ];
+
+    function draw3DHeart(c, x, y, size, pal, opacity, yaw, roll, isGlossy) {
+      c.save();
+      c.translate(x, y);
+      c.rotate(roll);
+
+      // Smooth 3D yaw perspective (keeps volumetric thickness even during rotation)
+      const cosYaw = Math.cos(yaw);
+      const scaleX = (cosYaw < 0 ? -1 : 1) * (0.35 + 0.65 * Math.abs(cosYaw));
+      c.scale(scaleX, 1);
+
+      const r = size * 0.5;
+      const s = r / 16;
+
+      // Soft drop shadow
+      c.save();
+      c.translate(3, 5);
+      c.beginPath();
+      c.moveTo(0, s * -4);
+      c.bezierCurveTo(s * -10, s * -14, s * -20, s * 2, 0, s * 16);
+      c.bezierCurveTo(s * 20, s * 2, s * 10, s * -14, 0, s * -4);
+      c.fillStyle = `rgba(50, 18, 28, ${0.14 * opacity})`;
+      c.fill();
+      c.restore();
+
+      // Main volumetric 3D heart path
+      c.beginPath();
+      c.moveTo(0, s * -4);
+      c.bezierCurveTo(s * -10, s * -14, s * -20, s * 2, 0, s * 16);
+      c.bezierCurveTo(s * 20, s * 2, s * 10, s * -14, 0, s * -4);
+      c.closePath();
+
+      // Directional spherical radial lighting gradient
+      const grad = c.createRadialGradient(-r * 0.32, -r * 0.38, r * 0.08, 0, 0, r * 1.18);
+      grad.addColorStop(0, pal.highlight);
+      grad.addColorStop(0.48, pal.base);
+      grad.addColorStop(1, pal.shadow);
+      c.fillStyle = grad;
+      c.globalAlpha = opacity;
+      c.fill();
+
+      // Delicate polished rim highlight
+      c.strokeStyle = `rgba(255, 255, 255, ${0.45 * opacity})`;
+      c.lineWidth = 1.0;
+      c.stroke();
+
+      // Glossy Glass or Polished Satin finish
+      if (isGlossy) {
+        // Specular lobe highlight oval (Top-Left Lobe)
+        c.save();
+        c.beginPath();
+        c.ellipse(-r * 0.38, -r * 0.38, r * 0.28, r * 0.16, -0.4, 0, Math.PI * 2);
+        const specGrad = c.createRadialGradient(-r * 0.38, -r * 0.38, 1, -r * 0.38, -r * 0.38, r * 0.28);
+        specGrad.addColorStop(0, `rgba(255, 255, 255, ${0.92 * opacity})`);
+        specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        c.fillStyle = specGrad;
+        c.fill();
+
+        // Secondary gleam on right lobe
+        c.beginPath();
+        c.ellipse(r * 0.32, -r * 0.34, r * 0.18, r * 0.10, 0.32, 0, Math.PI * 2);
+        c.fillStyle = `rgba(255, 255, 255, ${0.55 * opacity})`;
+        c.fill();
+
+        // Bottom rim catchlight
+        c.beginPath();
+        c.arc(r * 0.18, r * 0.65, r * 0.14, 0, Math.PI * 2);
+        c.fillStyle = `rgba(255, 255, 255, ${0.35 * opacity})`;
+        c.fill();
+        c.restore();
+      } else {
+        c.save();
+        const satinGrad = c.createLinearGradient(-r, -r, r, r);
+        satinGrad.addColorStop(0, `rgba(255, 255, 255, ${0.45 * opacity})`);
+        satinGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+        satinGrad.addColorStop(1, `rgba(255, 255, 255, ${0.20 * opacity})`);
+        c.fillStyle = satinGrad;
+        c.fill();
+        c.restore();
+      }
+
+      c.restore();
+    }
+
+    // ------------------------------------------------------------------------
+    // 3. 3D ROSE PETALS (Horizontal tumbling flip)
+    // ------------------------------------------------------------------------
+    function draw3DPetal(c, x, y, size, opacity, tumbleAngle, rot) {
+      c.save();
+      c.translate(x, y);
+      c.rotate(rot);
+
+      const cosTumble = Math.cos(tumbleAngle);
+      c.scale(1, cosTumble);
+
+      const s = size * 0.5;
+      c.beginPath();
+      c.moveTo(0, -s);
+      c.bezierCurveTo(s * 0.9, -s * 0.7, s * 1.1, s * 0.6, 0, s);
+      c.bezierCurveTo(-s * 1.1, s * 0.6, -s * 0.9, -s * 0.7, 0, -s);
+      c.closePath();
+
+      const isFront = cosTumble >= 0;
+      const grad = c.createLinearGradient(0, -s, 0, s);
+      if (isFront) {
+        grad.addColorStop(0, '#f48fb1');
+        grad.addColorStop(0.6, '#e91e63');
+        grad.addColorStop(1, '#ad1457');
+      } else {
+        grad.addColorStop(0, '#fff0f3');
+        grad.addColorStop(0.6, '#fce4ec');
+        grad.addColorStop(1, '#f8bbd0');
+      }
+      c.fillStyle = grad;
+      c.globalAlpha = opacity * 0.92;
+      c.fill();
+
+      // Curved petal vein highlight
+      c.beginPath();
+      c.moveTo(0, -s * 0.7);
+      c.quadraticCurveTo(s * 0.15, 0, 0, s * 0.7);
+      c.strokeStyle = isFront ? 'rgba(255, 255, 255, 0.45)' : 'rgba(233, 30, 99, 0.25)';
+      c.lineWidth = 1;
+      c.stroke();
+      c.restore();
+    }
+
+    // ------------------------------------------------------------------------
+    // 4. 3D LEAF
+    // ------------------------------------------------------------------------
+    function draw3DLeaf(c, x, y, size, opacity, rot) {
+      c.save();
+      c.translate(x, y);
+      c.rotate(rot);
+
+      const s = size * 0.55;
+      c.beginPath();
+      c.moveTo(0, -s);
+      c.bezierCurveTo(s * 0.8, -s * 0.35, s * 0.75, s * 0.35, 0, s);
+      c.bezierCurveTo(-s * 0.75, s * 0.35, -s * 0.8, -s * 0.35, 0, -s);
+      c.closePath();
+
+      const grad = c.createLinearGradient(-s * 0.5, -s, s * 0.5, s);
+      grad.addColorStop(0, '#b5cca8');
+      grad.addColorStop(0.5, '#9db89f');
+      grad.addColorStop(1, '#7a9478');
+      c.fillStyle = grad;
+      c.globalAlpha = opacity * 0.9;
+      c.fill();
+
+      c.beginPath();
+      c.moveTo(0, -s * 0.75);
+      c.lineTo(0, s * 0.75);
+      c.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      c.lineWidth = 1.2;
+      c.stroke();
+      c.restore();
+    }
+
+    // ------------------------------------------------------------------------
+    // 5. 5-PETAL PEACH BLOSSOM
+    // ------------------------------------------------------------------------
     function drawFlower(c, x, y, size, color, opacity, rot) {
       c.save();
       c.translate(x, y);
       c.rotate(rot);
       c.globalAlpha = opacity;
-      c.fillStyle = color;
 
       const petals = 5;
-      const r = size / 2;
+      const r = size * 0.45;
       for (let i = 0; i < petals; i++) {
         c.save();
         c.rotate((i * 2 * Math.PI) / petals);
         c.beginPath();
-        c.ellipse(0, -r, r * 0.52, r * 0.88, 0, 0, Math.PI * 2);
+        c.ellipse(0, -r, r * 0.55, r * 0.88, 0, 0, Math.PI * 2);
+        const pGrad = c.createRadialGradient(0, -r, 1, 0, -r, r);
+        pGrad.addColorStop(0, '#ffffff');
+        pGrad.addColorStop(0.5, color);
+        pGrad.addColorStop(1, '#e8a5b5');
+        c.fillStyle = pGrad;
         c.fill();
         c.restore();
       }
 
-      // Flower Center
       c.beginPath();
-      c.arc(0, 0, r * 0.38, 0, Math.PI * 2);
-      c.fillStyle = '#fff4cc';
+      c.arc(0, 0, r * 0.36, 0, Math.PI * 2);
+      c.fillStyle = '#dfb867';
+      c.fill();
+      c.beginPath();
+      c.arc(0, 0, r * 0.16, 0, Math.PI * 2);
+      c.fillStyle = '#fff6d5';
       c.fill();
       c.restore();
     }
 
-    // Draw Soft Green Leaf
-    function drawLeaf(c, x, y, size, color, opacity, rot) {
+    // ------------------------------------------------------------------------
+    // 6. FLUTTERING BUTTERFLY
+    // ------------------------------------------------------------------------
+    function drawButterfly(c, x, y, size, color, opacity, flap, rot) {
       c.save();
       c.translate(x, y);
       c.rotate(rot);
-      c.globalAlpha = opacity * 0.9;
+      c.globalAlpha = opacity;
+
+      const cosFlap = Math.cos(flap);
+      const wingW = size * 0.65 * (0.35 + 0.65 * Math.abs(cosFlap));
+      const wingH = size * 0.7;
+
+      c.save();
+      c.beginPath();
+      c.ellipse(-wingW * 0.55, -wingH * 0.2, wingW * 0.5, wingH * 0.45, -0.2, 0, Math.PI * 2);
+      c.ellipse(-wingW * 0.45, wingH * 0.25, wingW * 0.38, wingH * 0.32, 0.3, 0, Math.PI * 2);
       c.fillStyle = color;
-
-      const s = size * 0.7;
-      c.beginPath();
-      c.moveTo(0, -s);
-      c.bezierCurveTo(s * 0.75, -s * 0.3, s * 0.75, s * 0.3, 0, s);
-      c.bezierCurveTo(-s * 0.75, s * 0.3, -s * 0.75, -s * 0.3, 0, -s);
       c.fill();
-
-      // Delicate Leaf Stem Line
-      c.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      c.lineWidth = 1;
-      c.beginPath();
-      c.moveTo(0, -s * 0.7);
-      c.lineTo(0, s * 0.7);
+      c.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      c.lineWidth = 0.8;
       c.stroke();
+      c.restore();
 
+      c.save();
+      c.beginPath();
+      c.ellipse(wingW * 0.55, -wingH * 0.2, wingW * 0.5, wingH * 0.45, 0.2, 0, Math.PI * 2);
+      c.ellipse(wingW * 0.45, wingH * 0.25, wingW * 0.38, wingH * 0.32, -0.3, 0, Math.PI * 2);
+      c.fillStyle = color;
+      c.fill();
+      c.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      c.lineWidth = 0.8;
+      c.stroke();
+      c.restore();
+
+      c.beginPath();
+      c.ellipse(0, 0, 1.8, size * 0.32, 0, 0, Math.PI * 2);
+      c.fillStyle = '#4a2530';
+      c.fill();
       c.restore();
     }
 
-    // Draw 4-Point Golden Sparkle
-    function drawSparkle(c, x, y, size, opacity, twinkle) {
+    // ------------------------------------------------------------------------
+    // 7. PEARLS, BUBBLES & SPARKLE STARS
+    // ------------------------------------------------------------------------
+    function drawPearl(c, x, y, size, opacity) {
       c.save();
       c.translate(x, y);
-      const a = opacity * (0.4 + 0.6 * Math.sin(twinkle));
-      c.globalAlpha = Math.max(0, Math.min(1, a));
-      c.fillStyle = '#dfb867';
+      c.globalAlpha = opacity;
+      const r = size * 0.5;
 
       c.beginPath();
-      c.arc(0, 0, size, 0, Math.PI * 2);
+      c.arc(0, 0, r, 0, Math.PI * 2);
+      const pGrad = c.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.05, 0, 0, r);
+      pGrad.addColorStop(0, '#ffffff');
+      pGrad.addColorStop(0.35, '#fff6f8');
+      pGrad.addColorStop(0.75, '#f5e3ea');
+      pGrad.addColorStop(1, '#d8bfcb');
+      c.fillStyle = pGrad;
       c.fill();
 
-      c.strokeStyle = 'rgba(255, 235, 180, ' + a * 0.85 + ')';
-      c.lineWidth = 1.2;
       c.beginPath();
-      c.moveTo(-size * 2.8, 0);
-      c.lineTo(size * 2.8, 0);
-      c.moveTo(0, -size * 2.8);
-      c.lineTo(0, size * 2.8);
+      c.arc(-r * 0.32, -r * 0.32, r * 0.18, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      c.fill();
+      c.restore();
+    }
+
+    function drawBubble(c, x, y, size, opacity) {
+      c.save();
+      c.translate(x, y);
+      c.globalAlpha = opacity;
+      const r = size * 0.5;
+
+      c.beginPath();
+      c.arc(0, 0, r, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(255, 255, 255, 0.06)';
+      c.fill();
+
+      const bGrad = c.createLinearGradient(-r, -r, r, r);
+      bGrad.addColorStop(0, 'rgba(255, 205, 225, 0.65)');
+      bGrad.addColorStop(0.5, 'rgba(195, 235, 255, 0.55)');
+      bGrad.addColorStop(1, 'rgba(255, 240, 190, 0.65)');
+      c.strokeStyle = bGrad;
+      c.lineWidth = 1.3;
+      c.stroke();
+
+      c.beginPath();
+      c.ellipse(-r * 0.35, -r * 0.35, r * 0.22, r * 0.12, -0.4, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      c.fill();
+      c.beginPath();
+      c.arc(r * 0.28, r * 0.3, r * 0.1, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      c.fill();
+      c.restore();
+    }
+
+    function drawSparkleStar(c, x, y, size, opacity, twinkle) {
+      c.save();
+      c.translate(x, y);
+      const a = Math.max(0, Math.min(1, opacity * (0.35 + 0.65 * Math.sin(twinkle))));
+      c.globalAlpha = a;
+
+      c.beginPath();
+      c.arc(0, 0, size * 0.8, 0, Math.PI * 2);
+      c.fillStyle = '#dfb867';
+      c.fill();
+
+      c.strokeStyle = 'rgba(255, 240, 190, ' + (a * 0.9) + ')';
+      c.lineWidth = 1.3;
+      c.beginPath();
+      c.moveTo(-size * 3.2, 0);
+      c.lineTo(size * 3.2, 0);
+      c.moveTo(0, -size * 3.2);
+      c.lineTo(0, size * 3.2);
+      c.stroke();
+
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.moveTo(-size * 1.5, -size * 1.5);
+      c.lineTo(size * 1.5, size * 1.5);
+      c.moveTo(size * 1.5, -size * 1.5);
+      c.lineTo(-size * 1.5, size * 1.5);
       c.stroke();
       c.restore();
     }
 
-    function render() {
+    // ------------------------------------------------------------------------
+    // FOREGROUND PARTICLE POOL
+    // ------------------------------------------------------------------------
+    const maxParticles = isMob() ? 12 : 20;
+    const particles = [];
+
+    function createAtmosphereParticle(initY = null) {
+      const rand = Math.random();
+      let type = 'heart';
+      if (rand < 0.38) type = 'heart';
+      else if (rand < 0.58) type = 'petal';
+      else if (rand < 0.72) type = 'leaf';
+      else if (rand < 0.82) type = 'flower';
+      else if (rand < 0.88) type = 'pearl';
+      else if (rand < 0.93) type = 'bubble';
+      else type = 'sparkle';
+
+      let size = 26;
+      if (type === 'heart') {
+        size = isMob() ? Math.random() * 16 + 22 : Math.random() * 24 + 28;
+      } else if (type === 'petal') {
+        size = isMob() ? Math.random() * 12 + 18 : Math.random() * 18 + 22;
+      } else if (type === 'leaf') {
+        size = isMob() ? Math.random() * 14 + 22 : Math.random() * 20 + 26;
+      } else if (type === 'flower') {
+        size = isMob() ? Math.random() * 16 + 24 : Math.random() * 22 + 30;
+      } else if (type === 'pearl') {
+        size = isMob() ? Math.random() * 8 + 12 : Math.random() * 12 + 16;
+      } else if (type === 'bubble') {
+        size = isMob() ? Math.random() * 14 + 18 : Math.random() * 20 + 26;
+      } else {
+        size = isMob() ? Math.random() * 4 + 3 : Math.random() * 5 + 4;
+      }
+
+      const heartPal = HEART_PALETTES[Math.floor(Math.random() * HEART_PALETTES.length)];
+      const isGlossy = Math.random() < 0.65;
+      const flowerColor = ['#fcd3de', '#e8b0bd', '#fde2e4', '#e2d4f0', '#fae1dd'][Math.floor(Math.random() * 5)];
+
+      const silkUpperLevel = height * 0.62;
+      return {
+        type,
+        x: getParticleSpawnX(),
+        y: initY !== null ? initY : silkUpperLevel + Math.random() * 10,
+        size,
+        heartPal,
+        isGlossy,
+        flowerColor,
+        speedY: -(Math.random() * 0.45 + 0.25),
+        speedX: (Math.random() - 0.5) * 0.35,
+        swing: Math.random() * Math.PI * 2,
+        swingSpeed: Math.random() * 0.016 + 0.007,
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.012,
+        yaw: Math.random() * Math.PI * 2,
+        yawSpeed: Math.random() * 0.018 + 0.008,
+        tumble: Math.random() * Math.PI * 2,
+        tumbleSpeed: Math.random() * 0.022 + 0.012,
+        opacity: Math.random() * 0.35 + 0.55,
+        twinkle: Math.random() * Math.PI * 2
+      };
+    }
+
+    for (let i = 0; i < maxParticles; i++) {
+      particles.push(createAtmosphereParticle(Math.random() * (height * 0.56)));
+    }
+
+    // 2 Romantic Butterflies in upper region
+    const butterflies = [
+      {
+        x: width * 0.15,
+        y: height * 0.28,
+        size: isMob() ? 22 : 28,
+        color: 'rgba(226, 212, 240, 0.85)',
+        flap: 0,
+        flapSpeed: 0.18,
+        t: 0,
+        speedT: 0.003
+      },
+      {
+        x: width * 0.85,
+        y: height * 0.42,
+        size: isMob() ? 20 : 26,
+        color: 'rgba(252, 211, 222, 0.85)',
+        flap: 2,
+        flapSpeed: 0.20,
+        t: Math.PI,
+        speedT: 0.0028
+      }
+    ];
+
+    // ------------------------------------------------------------------------
+    // FOREGROUND ATMOSPHERE ANIMATION LOOP
+    // Strictly upper-region decorative floating objects (clean lower area)
+    // ------------------------------------------------------------------------
+    function renderAtmosphere() {
+      if (!isTabVisible) {
+        requestAnimationFrame(renderAtmosphere);
+        return;
+      }
+
       ctx.clearRect(0, 0, width, height);
 
+      // A. Render 3D Foreground Glass Cubes (Above the silk boundary)
+      for (const cube of fgCubes) {
+        cube.swing += cube.swingSpeed;
+        cube.x += cube.speedX + Math.sin(cube.swing) * 0.45;
+        cube.y += cube.speedY;
+        cube.rx += cube.vrx;
+        cube.ry += cube.vry;
+        cube.rz += cube.vrz;
+
+        if (cube.y < -80) {
+          Object.assign(cube, createFgGlassCube(height * 0.62 + 10));
+        }
+
+        drawGlassCube(ctx, cube);
+      }
+
+      // B. Render Romantic Foreground Atmosphere Particles (Hearts, Petals, Leaves, etc.)
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
         p.swing += p.swingSpeed;
-        p.x += p.speedX + Math.sin(p.swing) * 0.55;
+        p.x += p.speedX + Math.sin(p.swing) * 0.5;
         p.y += p.speedY;
         p.rotation += p.rotSpeed;
-        p.twinkle += 0.04;
+        p.yaw += p.yawSpeed;
+        p.tumble += p.tumbleSpeed;
+        p.twinkle += 0.045;
 
-        if (p.y < -40) {
-          particles[i] = createParticle(height + 20);
+        if (p.y < -50) {
+          particles[i] = createAtmosphereParticle(height * 0.62 + 10);
+          continue;
         }
 
-        const currentOpacity = currentPage === 2 ? p.opacity * 0.65 : p.opacity;
+        const op = currentPage === 2 ? p.opacity * 0.65 : p.opacity;
 
         if (p.type === 'heart') {
-          drawHeart(ctx, p.x, p.y, p.size, p.colorBase, currentOpacity, p.rotation);
-        } else if (p.type === 'flower') {
-          drawFlower(ctx, p.x, p.y, p.size, p.colorBase, currentOpacity, p.rotation);
+          draw3DHeart(ctx, p.x, p.y, p.size, p.heartPal, op, p.yaw, p.rotation, p.isGlossy);
+        } else if (p.type === 'petal') {
+          draw3DPetal(ctx, p.x, p.y, p.size, op, p.tumble, p.rotation);
         } else if (p.type === 'leaf') {
-          drawLeaf(ctx, p.x, p.y, p.size, p.colorBase, currentOpacity, p.rotation);
+          draw3DLeaf(ctx, p.x, p.y, p.size, op, p.rotation);
+        } else if (p.type === 'flower') {
+          drawFlower(ctx, p.x, p.y, p.size, p.flowerColor, op, p.rotation);
+        } else if (p.type === 'pearl') {
+          drawPearl(ctx, p.x, p.y, p.size, op);
+        } else if (p.type === 'bubble') {
+          drawBubble(ctx, p.x, p.y, p.size, op);
         } else {
-          drawSparkle(ctx, p.x, p.y, p.size, currentOpacity, p.twinkle);
+          drawSparkleStar(ctx, p.x, p.y, p.size, op, p.twinkle);
         }
       }
 
-      requestAnimationFrame(render);
+      // C. Render Romantic Butterflies
+      for (const b of butterflies) {
+        b.flap += b.flapSpeed;
+        b.t += b.speedT;
+        const marginOffset = Math.sin(b.t) * (width * 0.09);
+        const yOffset = Math.cos(b.t * 0.7) * (height * 0.10);
+        const bx = b.x + marginOffset;
+        const by = b.y + yOffset;
+        const flightAngle = Math.sin(b.t * 0.7) * 0.20;
+
+        drawButterfly(ctx, bx, by, b.size, b.color, 0.85, b.flap, flightAngle);
+      }
+
+      requestAnimationFrame(renderAtmosphere);
     }
 
-    render();
+    renderAtmosphere();
   }
 
   /* ==========================================================================
@@ -1207,6 +2373,8 @@ function resolveSupabasePhotoUrl(photoPath) {
     if (!triggerBtn || !popoverMenu) return;
 
     function openMenu() {
+      // Immediately reflect current page upon opening
+      updateJourneyMenuActive(currentPage);
       popoverMenu.classList.add('open');
       popoverMenu.setAttribute('aria-hidden', 'false');
       triggerBtn.setAttribute('aria-expanded', 'true');
@@ -1247,6 +2415,7 @@ function resolveSupabasePhotoUrl(photoPath) {
         const pageIdx = btn.getAttribute('data-jump-page');
         if (pageIdx) {
           showPage(pageIdx);
+          updateJourneyMenuActive(pageIdx);
           closeMenu();
         }
       });
@@ -1265,6 +2434,9 @@ function resolveSupabasePhotoUrl(photoPath) {
         closeMenu();
       }
     });
+
+    // Ensure active chapter is initially highlighted
+    updateJourneyMenuActive(currentPage);
   }
 
   /* ==========================================================================
@@ -1518,6 +2690,7 @@ function resolveSupabasePhotoUrl(photoPath) {
      INITIALIZATION ON DOM LOAD (PRESERVES ACTIVE PAGE & SCROLL VIA SESSIONSTORAGE)
      ========================================================================== */
   document.addEventListener('DOMContentLoaded', () => {
+    initRomanticWorldBg();
     initAmbientCanvas();
     initJourneyMenu();
     initPhotoZoom();
@@ -1527,19 +2700,23 @@ function resolveSupabasePhotoUrl(photoPath) {
     });
     initDaysTogetherCounter();
 
-    // Check saved page in sessionStorage
-    let savedPage = null;
-    try {
-      savedPage = sessionStorage.getItem('currentPage');
-    } catch (e) { }
-
+    // Check saved page in URL params or sessionStorage
     let initialPage = 1;
-    if (savedPage) {
-      const parsed = parseInt(savedPage, 10);
-      if (!isNaN(parsed) && parsed >= 1 && parsed <= pages.length) {
-        initialPage = parsed;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlPage = parseInt(urlParams.get('page'), 10);
+      const hashMatch = window.location.hash.match(/page[=-]?(\d+)/i);
+      const hashPage = hashMatch ? parseInt(hashMatch[1], 10) : null;
+      const savedPage = parseInt(sessionStorage.getItem('currentPage'), 10);
+
+      if (!isNaN(urlPage) && urlPage >= 1 && urlPage <= pages.length) {
+        initialPage = urlPage;
+      } else if (hashPage && hashPage >= 1 && hashPage <= pages.length) {
+        initialPage = hashPage;
+      } else if (!isNaN(savedPage) && savedPage >= 1 && savedPage <= pages.length) {
+        initialPage = savedPage;
       }
-    }
+    } catch (e) { }
 
     showPage(initialPage, true);
 
